@@ -1,6 +1,3 @@
-# 1. Aplikasi Tema Kebencanaan pada Gunung Merapi menggunakan ReactJS
-Aplikasi ini dibuat dengan tema kebencanaan pada Gunung Merapi menggunakan ReactJS, dengan menerapkan berbagai konsep pengembangan aplikasi web.
-
 ## Fitur yang Diterapkan
 1. **Terapkan CSS framework (Tailwind atau Bootstrap)**
 2. **Terapkan Konsep Props**
