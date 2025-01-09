@@ -30,14 +30,14 @@ const scrapePage = async (pageNumber) => {
     $('.timeline-item').each((_, element) => {
       const namaGunung = $(element).find('.timeline-title a').text().trim();
       if (!namaGunung) return;
-
+    
       const ttlReport = $(element)
         .find('.timeline-author')
         .text()
         .trim()
         .split('-')[1]?.trim() || 'N/A';
       const statusGunung = $(element).find('.badge').text().trim() || 'N/A';
-      const periodeReport = $(element)
+      const periode = $(element)
         .find('.timeline-time')
         .text()
         .trim()
@@ -45,17 +45,25 @@ const scrapePage = async (pageNumber) => {
       const descReport = $(element).find('.card p').first().text().trim() || 'N/A';
       const reportBy = $(element).find('.timeline-author span').text().trim() || 'N/A';
       const detailUrl = $(element).find('.card-link').attr('href') || 'N/A';
-      const [day, month, year] = ttlReport.split(' ');
-      const formattedMonth = `${year}${months[month]}${day.padStart(2, '0')}`;
-      const timeReport = periodeReport.replace(/:/g, '');
-
+    
+      // Parse date from ttlReport
+      const ttlReportParts = ttlReport.split(', ')[1]?.split(' ') || []; // "06 Januari 2025"
+      const [day, monthName, year] = ttlReportParts;
+    
+      if (!months[monthName]) {
+        console.error(`Month name "${monthName}" is invalid or not mapped.`);
+        return; // Skip this entry
+      }
+    
+      const formattedMonth = `${year}${months[monthName]}${day.padStart(2, '0')}`;
+      const timeReport = periode.replace(/:/g, '') || '0000';
+    
       const imageUrl = `https://magma.esdm.go.id/storage/var/MER/MER${formattedMonth}${timeReport}.jpg`;
-
-      // Prepare the row for Supabase insertion
+    
       dataToInsert.push({
         nama_gunung: namaGunung,
         ttl_report: ttlReport,
-        periode: periodeReport,
+        periode,
         status_gunung: statusGunung,
         desc_report: descReport,
         report_by: reportBy,
@@ -63,6 +71,7 @@ const scrapePage = async (pageNumber) => {
         image_url: imageUrl,
       });
     });
+    
 
     const hasNextPage = $('.page-item a[rel="next"]').length > 0;
     return { dataToInsert, hasNextPage };
