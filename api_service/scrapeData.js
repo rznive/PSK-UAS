@@ -18,19 +18,35 @@ const months = {
   Desember: '12',
 };
 
-const scrapePage = async (pageNumber) => {
+const getFormattedDate = (date) => {
+  const year = date.getFullYear();
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const scrapePage = async (pageNumber, endDate) => {
   try {
-    console.log(`Scraping page ${pageNumber}...`);
+    console.log(`Scraping page ${pageNumber} for date range ending ${endDate}...`);
     const { data: html } = await axios.get(
-      `https://magma.esdm.go.id/v1/gunung-api/laporan/search/q?code=MER&start=2024-01-01&end=2025-01-08&page=${pageNumber}`
+      `https://magma.esdm.go.id/v1/gunung-api/laporan/search/q?code=MER&start=2024-01-01&end=${endDate}&page=${pageNumber}`
     );
     const $ = cheerio.load(html);
+
+    if ($('title').text().trim() === 'Halaman Tidak Ditemukan') {
+      console.log('Page not found. Retrying with one day earlier...');
+      const previousDate = new Date(endDate);
+      previousDate.setDate(previousDate.getDate() - 1);
+      const newEndDate = getFormattedDate(previousDate);
+      return scrapePage(pageNumber, newEndDate);
+    }
+
     const dataToInsert = [];
 
     $('.timeline-item').each((_, element) => {
       const namaGunung = $(element).find('.timeline-title a').text().trim();
       if (!namaGunung) return;
-    
+
       const ttlReport = $(element)
         .find('.timeline-author')
         .text()
@@ -45,21 +61,20 @@ const scrapePage = async (pageNumber) => {
       const descReport = $(element).find('.card p').first().text().trim() || 'N/A';
       const reportBy = $(element).find('.timeline-author span').text().trim() || 'N/A';
       const detailUrl = $(element).find('.card-link').attr('href') || 'N/A';
-    
-      // Parse date from ttlReport
-      const ttlReportParts = ttlReport.split(', ')[1]?.split(' ') || []; // "06 Januari 2025"
+
+      const ttlReportParts = ttlReport.split(', ')[1]?.split(' ') || [];
       const [day, monthName, year] = ttlReportParts;
-    
+
       if (!months[monthName]) {
         console.error(`Month name "${monthName}" is invalid or not mapped.`);
-        return; // Skip this entry
+        return;
       }
-    
+
       const formattedMonth = `${year}${months[monthName]}${day.padStart(2, '0')}`;
       const timeReport = periode.replace(/:/g, '') || '0000';
-    
+
       const imageUrl = `https://magma.esdm.go.id/storage/var/MER/MER${formattedMonth}${timeReport}.jpg`;
-    
+
       dataToInsert.push({
         nama_gunung: namaGunung,
         ttl_report: ttlReport,
@@ -71,27 +86,25 @@ const scrapePage = async (pageNumber) => {
         image_url: imageUrl,
       });
     });
-    
 
     const hasNextPage = $('.page-item a[rel="next"]').length > 0;
-    return { dataToInsert, hasNextPage };
+    return { dataToInsert, hasNextPage, endDate };
   } catch (error) {
     console.error(`Error scraping page ${pageNumber}:`, error.message);
-    return { dataToInsert: [], hasNextPage: false };
+    return { dataToInsert: [], hasNextPage: false, endDate };
   }
 };
 
 const deleteDataBeforeInsert = async () => {
   try {
     console.log('Deleting all data from the "activity_report" table...');
-    const { error } = await supabase.from('activity_report').delete().neq('id', 0); // Kondisi selalu benar
+    const { error } = await supabase.from('activity_report').delete().neq('id', 0);
     if (error) throw error;
     console.log('All old data has been deleted from the table.');
   } catch (error) {
     console.error('Error deleting old data from Supabase:', error.message);
   }
 };
-
 
 const insertDataToSupabase = async (data) => {
   try {
@@ -107,14 +120,15 @@ const insertDataToSupabase = async (data) => {
   try {
     console.log('Starting to scrape volcanic activity reports...');
 
-    // Delete previous data before inserting new data
     await deleteDataBeforeInsert();
 
     let currentPage = 1;
     let hasMorePages = true;
 
+    let endDate = getFormattedDate(new Date());
+
     while (hasMorePages) {
-      const { dataToInsert, hasNextPage } = await scrapePage(currentPage);
+      const { dataToInsert, hasNextPage, endDate: updatedEndDate } = await scrapePage(currentPage, endDate);
 
       if (dataToInsert.length) {
         await insertDataToSupabase(dataToInsert);
@@ -124,11 +138,12 @@ const insertDataToSupabase = async (data) => {
       }
 
       hasMorePages = hasNextPage;
+      endDate = updatedEndDate;
 
       if (hasMorePages) {
         currentPage += 1;
         console.log(`Moving to page ${currentPage}...`);
-        await new Promise((resolve) => setTimeout(resolve, 5000)); // Delay 5 seconds
+        await new Promise((resolve) => setTimeout(resolve, 5000));
       }
     }
 
