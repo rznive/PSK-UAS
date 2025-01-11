@@ -21,6 +21,34 @@ const getActivityReportsHandler = async (req, res) => {
   }
 };
 
+const getActivityReportByIdHandler = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const { data, error } = await supabase
+      .from('activity_report')
+      .select('*')
+      .eq('id', id)
+      .single(); 
+
+    if (error) {
+      return res.status(500).json({ message: "Failed to fetch activity report", error });
+    }
+
+    if (!data) {
+      return res.status(404).json({ message: "Report not found" });
+    }
+
+    res.status(200).json({
+      status: true,
+      message: "Activity report fetched successfully",
+      data,
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 const createCommentHandler = async (req, res) => {
   const { activity_report_id, comment_text } = req.body;
   const token = req.headers.authorization?.split(' ')[1];
@@ -32,6 +60,7 @@ const createCommentHandler = async (req, res) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
     const user_id = decoded.id;
+    const nama = decoded.nama;
 
     if (!user_id) {
       return res.status(401).json({ message: "User ID not found in token" });
@@ -39,8 +68,8 @@ const createCommentHandler = async (req, res) => {
 
     const { data, error } = await supabase
       .from('data_commentar')
-      .insert([{ activity_report_id, user_id, comment_text }])
-      .select('id, activity_report_id, user_id, comment_text, created_at')
+      .insert([{ activity_report_id, user_id, nama, comment_text }])
+      .select('id, activity_report_id, user_id, nama, comment_text, created_at')
       .single();
 
     if (error) {
@@ -63,7 +92,7 @@ const getCommentsHandler = async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('data_commentar')
-      .select('id, activity_report_id, user_id, comment_text, created_at')
+      .select('id, activity_report_id, user_id, nama, comment_text, created_at')
       .eq('activity_report_id', activity_report_id);
 
     if (error) {
@@ -110,6 +139,7 @@ const deleteCommentHandler = async (req, res) => {
 
 module.exports = {
   getActivityReportsHandler,
+  getActivityReportByIdHandler,
   createCommentHandler,
   getCommentsHandler,
   deleteCommentHandler,
