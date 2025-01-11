@@ -29,7 +29,7 @@ const getActivityReportByIdHandler = async (req, res) => {
       .from('activity_report')
       .select('*')
       .eq('id', id)
-      .single(); 
+      .single();
 
     if (error) {
       return res.status(500).json({ message: "Failed to fetch activity report", error });
@@ -111,8 +111,37 @@ const getCommentsHandler = async (req, res) => {
 
 const deleteCommentHandler = async (req, res) => {
   const { id } = req.params;
+  const token = req.headers.authorization?.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ message: "No token provided" });
+  }
 
   try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
+    const user_id = decoded.id;
+
+    if (!user_id) {
+      return res.status(401).json({ message: "User ID not found in token" });
+    }
+
+    // Fetch the existing comment to check if the user is the owner
+    const { data: existingComment, error: fetchError } = await supabase
+      .from('data_commentar')
+      .select('user_id')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !existingComment) {
+      return res.status(404).json({ message: "Comment not found" });
+    }
+
+    // Check if the current user is the one who created the comment
+    if (existingComment.user_id !== user_id) {
+      return res.status(403).json({ message: "Unauthorized to delete this comment" });
+    }
+
+    // Proceed to delete the comment if the user is authorized
     const { data, error } = await supabase
       .from('data_commentar')
       .delete()
